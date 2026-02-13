@@ -5,11 +5,11 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Ads init (crash-safe)
   try {
     await MobileAds.instance.initialize();
   } catch (_) {}
@@ -33,6 +33,12 @@ class RetroRelicsApp extends StatelessWidget {
           primary: Color(0xFFE6C47C),
           surface: Color(0xFF0F1620),
         ),
+        textTheme: const TextTheme(
+          headlineSmall: TextStyle(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.2,
+          ),
+        ),
       ),
       home: const _PermissionGate(),
     );
@@ -40,7 +46,7 @@ class RetroRelicsApp extends StatelessWidget {
 }
 
 /// ------------------------------
-/// Permission Gate (FIXED)
+/// Permission Gate
 /// ------------------------------
 class _PermissionGate extends StatefulWidget {
   const _PermissionGate();
@@ -52,8 +58,7 @@ class _PermissionGate extends StatefulWidget {
 class _PermissionGateState extends State<_PermissionGate>
     with WidgetsBindingObserver {
   bool _loading = true;
-  String? _error;
-  String _status = "…";
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -68,10 +73,9 @@ class _PermissionGateState extends State<_PermissionGate>
     super.dispose();
   }
 
-  // Re-check when returning from Settings
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed && _hasError) {
       _init();
     }
   }
@@ -79,80 +83,70 @@ class _PermissionGateState extends State<_PermissionGate>
   Future<void> _init() async {
     setState(() {
       _loading = true;
-      _error = null;
-      _status = "Requesting permission…";
+      _hasError = false;
     });
 
-    // Ask permission
     final ps = await PhotoManager.requestPermissionExtend();
-
-    // IMPORTANT:
-    // On Android 13+/MIUI, LIMITED can still be usable.
-    // Also: ps flags can be wrong. So we verify by actually reading assets.
-    setState(() {
-      _status =
-          "Permission flags -> isAuth=${ps.isAuth}, isLimited=${ps.isLimited}";
-    });
 
     if (!ps.isAuth && !ps.isLimited) {
       setState(() {
         _loading = false;
-        _error =
-            "No photo permission.\n\nOpen Settings and allow access to Photos & Videos.";
+        _hasError = true;
       });
       return;
     }
 
-    // Real verification: can we read albums/assets?
     final canRead = await _canReadAnyAsset();
     if (!canRead) {
       setState(() {
         _loading = false;
-        _error =
-            "Permission looks granted, but MIUI still blocks access.\n\nFix:\n1) Settings → Apps → Retro Relics → Permissions → Photos & Videos → ALWAYS allow full access.\n2) Also check MIUI Privacy/Permission Manager for Files & Media.\n3) Reopen app.";
+        _hasError = true;
       });
       return;
     }
 
-    setState(() => _loading = false);
+    setState(() {
+      _loading = false;
+      _hasError = false;
+    });
   }
 
   Future<bool> _canReadAnyAsset() async {
     try {
-      // Try get album list
-      final paths = await PhotoManager.getAssetPathList(
-        type: RequestType.image,
-        hasAll: true,
-        onlyAll: false,
-      );
+      final album = await _pickRecentAlbum();
+      if (album == null) return false;
 
-      if (paths.isEmpty) {
-        setState(() => _status = "$_status | albums=0");
-        return false;
-      }
-
-      AssetPathEntity all = paths.first;
-      for (final p in paths) {
-        if (p.isAll) {
-          all = p;
-          break;
-        }
-      }
-
-      final total = await all.assetCountAsync;
-      setState(() => _status = "$_status | album=${all.name} total=$total");
-
+      final total = await album.assetCountAsync;
       if (total <= 0) return false;
 
-      // Try load 1 asset
-      final list = await all.getAssetListPaged(page: 0, size: 1);
-      setState(() => _status = "$_status | firstLoad=${list.length}");
-
+      final list = await album.getAssetListPaged(page: 0, size: 1);
       return list.isNotEmpty;
-    } catch (e) {
-      setState(() => _status = "$_status | verifyError=$e");
+    } catch (_) {
       return false;
     }
+  }
+
+  Future<AssetPathEntity?> _pickRecentAlbum() async {
+    final paths = await PhotoManager.getAssetPathList(
+      type: RequestType.image,
+      hasAll: true,
+      onlyAll: false,
+    );
+    if (paths.isEmpty) return null;
+
+    final recentByName = paths.cast<AssetPathEntity?>().firstWhere(
+          (p) => (p?.name ?? "").toLowerCase().contains("recent"),
+          orElse: () => null,
+        );
+    if (recentByName != null) return recentByName;
+
+    final all = paths.cast<AssetPathEntity?>().firstWhere(
+          (p) => p?.isAll == true,
+          orElse: () => null,
+        );
+    if (all != null) return all;
+
+    return paths.first;
   }
 
   @override
@@ -161,7 +155,7 @@ class _PermissionGateState extends State<_PermissionGate>
       return const _Shell(child: Center(child: CircularProgressIndicator()));
     }
 
-    if (_error != null) {
+    if (_hasError) {
       return _Shell(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -174,12 +168,10 @@ class _PermissionGateState extends State<_PermissionGate>
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 10),
               Text(
-                _error!,
+                "No photo access.\n\nOpen Settings and allow FULL access to Photos & Videos.",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white.withOpacity(0.75)),
               ),
-              const SizedBox(height: 14),
-              _DebugBox(text: _status),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -216,7 +208,8 @@ class RetroRelicsViewer extends StatefulWidget {
   State<RetroRelicsViewer> createState() => _RetroRelicsViewerState();
 }
 
-class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
+class _RetroRelicsViewerState extends State<RetroRelicsViewer>
+    with WidgetsBindingObserver {
   int _credits = 15;
 
   final Random _rng = Random();
@@ -226,78 +219,136 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
 
   bool _busy = false;
   String? _toast;
-  String _debugInfo = "Loading…";
 
   RewardedAd? _rewardedAd;
   bool _rewardedLoading = false;
 
+  static const _kPrefsCredits = "rr_credits";
+  static const _kPrefsCurrentId = "rr_current_id";
+  static const _kPrefsSeen = "rr_seen_ids";
+
+  // Swipe state
+  double _dragDx = 0.0;
+
   @override
   void initState() {
     super.initState();
-    _loadAssets();
+    WidgetsBinding.instance.addObserver(this);
+    _restoreState().then((_) {
+      _loadAssets();
+    });
     _loadRewarded();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _rewardedAd?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _persistState();
+    }
+  }
+
+  Future<void> _restoreState() async {
+    final prefs = await SharedPreferences.getInstance();
+    _credits = prefs.getInt(_kPrefsCredits) ?? 15;
+
+    final seen = prefs.getStringList(_kPrefsSeen) ?? const <String>[];
+    _seen
+      ..clear()
+      ..addAll(seen.take(500));
+  }
+
+  Future<void> _persistState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kPrefsCredits, _credits);
+    await prefs.setStringList(_kPrefsSeen, _seen.take(500).toList());
+
+    final currentId = _current?.id;
+    if (currentId != null) {
+      await prefs.setString(_kPrefsCurrentId, currentId);
+    }
+  }
+
+  Future<AssetPathEntity?> _pickRecentAlbum() async {
+    final paths = await PhotoManager.getAssetPathList(
+      type: RequestType.image,
+      hasAll: true,
+      onlyAll: false,
+    );
+    if (paths.isEmpty) return null;
+
+    final recentByName = paths.cast<AssetPathEntity?>().firstWhere(
+          (p) => (p?.name ?? "").toLowerCase().contains("recent"),
+          orElse: () => null,
+        );
+    if (recentByName != null) return recentByName;
+
+    final all = paths.cast<AssetPathEntity?>().firstWhere(
+          (p) => p?.isAll == true,
+          orElse: () => null,
+        );
+    if (all != null) return all;
+
+    return paths.first;
   }
 
   Future<void> _loadAssets() async {
     setState(() {
       _busy = true;
       _toast = null;
-      _debugInfo = "Fetching albums…";
     });
 
     try {
-      final paths = await PhotoManager.getAssetPathList(
-        type: RequestType.image,
-        hasAll: true,
-        onlyAll: false,
-      );
-
-      if (paths.isEmpty) {
+      final recentAlbum = await _pickRecentAlbum();
+      if (recentAlbum == null) {
         setState(() {
           _assets = [];
           _current = null;
-          _debugInfo = "No albums returned.";
-          _toast = "No photos / no access.";
+          _toast = "No photos found.";
           _busy = false;
         });
         return;
       }
 
-      AssetPathEntity all = paths.first;
-      for (final p in paths) {
-        if (p.isAll) {
-          all = p;
-          break;
-        }
-      }
-
-      final total = await all.assetCountAsync;
+      final total = await recentAlbum.assetCountAsync;
       final size = min(2000, max(0, total));
-      final assets = await all.getAssetListPaged(page: 0, size: size);
+      final assets = await recentAlbum.getAssetListPaged(page: 0, size: size);
 
       setState(() {
         _assets = assets;
-        _debugInfo =
-            "Album: ${all.name} | total=$total | loaded=${assets.length}";
         _busy = false;
       });
 
       if (assets.isEmpty) {
-        _showToast("0 photos loaded. MIUI/permission still blocking.");
+        _showToast("No photos in Recent.");
         return;
       }
 
+      final prefs = await SharedPreferences.getInstance();
+      final lastId = prefs.getString(_kPrefsCurrentId);
+
+      if (lastId != null) {
+        final match = assets.cast<AssetEntity?>().firstWhere(
+              (a) => a?.id == lastId,
+              orElse: () => null,
+            );
+        if (match != null) {
+          setState(() => _current = match);
+          return;
+        }
+      }
+
       _nextRandom();
-    } catch (e) {
+    } catch (_) {
       setState(() {
         _busy = false;
-        _debugInfo = "Exception: $e";
         _toast = "Failed to load photos.";
       });
     }
@@ -321,14 +372,17 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
     do {
       pick = _assets[_rng.nextInt(_assets.length)];
       tries++;
-    } while (_seen.contains(pick.id) && tries < 30);
+    } while (_seen.contains(pick.id) && tries < 40);
 
     _seen.add(pick.id);
 
     setState(() {
       _current = pick;
       _toast = null;
+      _dragDx = 0.0;
     });
+
+    _persistState();
   }
 
   void _consumeCreditOrGate(Future<void> Function() action) async {
@@ -336,6 +390,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
 
     if (_credits > 0) {
       setState(() => _credits--);
+      _persistState();
       await action();
       return;
     }
@@ -380,6 +435,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
 
         if (deleted) {
           _assets.removeWhere((a) => a.id == asset.id);
+          _seen.remove(asset.id);
           _showToast("Deleted.");
           _nextRandom();
         } else {
@@ -442,6 +498,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
     ad.show(
       onUserEarnedReward: (_, __) {
         setState(() => _credits = 5);
+        _persistState();
         _showToast("Unlocked 5 more.");
       },
     );
@@ -450,13 +507,16 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
   void _showRewardGate() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF0F1620),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) {
+        final bottom = MediaQuery.of(ctx).padding.bottom;
         return Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+          // ✅ FIX: push buttons above system nav bar
+          padding: EdgeInsets.fromLTRB(18, 16, 18, 24 + bottom + 10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -482,7 +542,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: _rewardedLoading ? null : _showRewarded,
-                  child: Text(_rewardedLoading ? "Loading..." : "Watch & Unlock"),
+                  child: Text(_rewardedLoading ? "Loading..." : "Watch Ad"),
                 ),
               ),
               const SizedBox(height: 10),
@@ -508,6 +568,39 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
     });
   }
 
+  // -------------------------
+  // Swipe gestures
+  // -------------------------
+  void _onPanUpdate(DragUpdateDetails d) {
+    if (_busy || _current == null) return;
+    setState(() => _dragDx += d.delta.dx);
+  }
+
+  Future<void> _onPanEnd(DragEndDetails d) async {
+    if (_busy || _current == null) return;
+
+    // threshold based on screen width
+    final w = MediaQuery.of(context).size.width;
+    final threshold = w * 0.22;
+
+    if (_dragDx <= -threshold) {
+      // swipe left -> delete
+      setState(() => _dragDx = -w); // animate out visually
+      await _onDelete();
+      return;
+    }
+
+    if (_dragDx >= threshold) {
+      // swipe right -> keep
+      setState(() => _dragDx = w); // animate out visually
+      await _onKeep();
+      return;
+    }
+
+    // snap back
+    setState(() => _dragDx = 0.0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final asset = _current;
@@ -522,21 +615,45 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer> {
                 credits: _credits,
                 onReload: _busy ? null : _loadAssets,
               ),
-              const SizedBox(height: 8),
-              _DebugBox(text: _debugInfo),
               const SizedBox(height: 10),
-              Expanded(child: _MediaCard(asset: asset, busy: _busy)),
-              const SizedBox(height: 12),
-              _ActionRow(
-                enabled: !_busy && asset != null,
-                onDelete: _onDelete,
-                onShare: _onShare,
-                onKeep: _onKeep,
+
+              // ✅ FIX: Give the image more vertical space.
+              // Buttons are still there, but image area is bigger now.
+              Expanded(
+                flex: 13,
+                child: GestureDetector(
+                  onPanUpdate: _onPanUpdate,
+                  onPanEnd: _onPanEnd,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    transform: Matrix4.translationValues(_dragDx, 0, 0),
+                    child: _MediaCard(asset: asset, busy: _busy),
+                  ),
+                ),
               ),
-              if (_toast != null) ...[
-                const SizedBox(height: 10),
-                _Toast(text: _toast!),
-              ],
+
+              const SizedBox(height: 10),
+
+              // ✅ Buttons slightly higher & tighter spacing
+              Expanded(
+                flex: 3,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _ActionRow(
+                      enabled: !_busy && asset != null,
+                      onDelete: _onDelete,
+                      onShare: _onShare,
+                      onKeep: _onKeep,
+                    ),
+                    if (_toast != null) ...[
+                      const SizedBox(height: 10),
+                      _Toast(text: _toast!),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -572,6 +689,7 @@ class _Shell extends StatelessWidget {
 class _TopBar extends StatelessWidget {
   final int credits;
   final VoidCallback? onReload;
+
   const _TopBar({required this.credits, required this.onReload});
 
   @override
@@ -613,33 +731,10 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _DebugBox extends StatelessWidget {
-  final String text;
-  const _DebugBox({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
-}
-
 class _MediaCard extends StatelessWidget {
   final AssetEntity? asset;
   final bool busy;
+
   const _MediaCard({required this.asset, required this.busy});
 
   @override
@@ -663,17 +758,27 @@ class _MediaCard extends StatelessWidget {
           if (asset == null)
             Center(
               child: Text(
-                "No image",
+                "Loading...",
                 style: TextStyle(color: Colors.white.withOpacity(0.7)),
               ),
             )
           else
             Positioned.fill(
-              child: AssetEntityImage(
-                asset!,
-                isOriginal: false,
-                thumbnailSize: const ThumbnailSize.square(1500),
-                fit: BoxFit.cover,
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  final w = max(200, c.maxWidth.floor());
+                  final h = max(200, c.maxHeight.floor());
+
+                  // ✅ FIX: keep aspect ratio, no distortion
+                  // Image will fit inside frame (letterbox if needed).
+                  return AssetEntityImage(
+                    asset!,
+                    isOriginal: false,
+                    thumbnailSize: ThumbnailSize(w, h),
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  );
+                },
               ),
             ),
           if (busy)
@@ -694,6 +799,7 @@ class _ActionRow extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onShare;
   final VoidCallback onKeep;
+
   const _ActionRow({
     required this.enabled,
     required this.onDelete,
