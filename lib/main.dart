@@ -12,7 +12,7 @@ class RRPalette {
   static const Color bg = Color(0xFF0B0F14);
   static const Color surface = Color(0xFF0F1620);
 
-  // Dark, muted Blue -> Red (default theme)
+  // Default theme: dark muted Blue -> Red
   static const Color blue = Color(0xFF0D2B45);
   static const Color red = Color(0xFF4B0D1F);
 
@@ -20,7 +20,7 @@ class RRPalette {
   static const Color delete = Color(0xFF7A1E2C);
   static const Color share = Color(0xFF3A3D44);
 
-  // Grey theme gradient
+  // Light grey theme gradient
   static const Color greyLight = Color(0xFFB8BCC6);
   static const Color greyDark = Color(0xFF2A2D33);
 
@@ -28,7 +28,7 @@ class RRPalette {
   static const Color darkGreyA = Color(0xFF2B2F36);
   static const Color darkGreyB = Color(0xFF111318);
 
-  // Black theme
+  // Black theme gradient
   static const Color blackA = Color(0xFF000000);
   static const Color blackB = Color(0xFF050607);
 }
@@ -44,7 +44,6 @@ const String _kPrefsThemeMode = 'rr_theme_mode';
 
 class RRThemeController extends ChangeNotifier {
   RRThemeController(this.mode);
-
   RRThemeMode mode;
 
   void setMode(RRThemeMode m) {
@@ -74,10 +73,9 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
   final themeStr = prefs.getString(_kPrefsThemeMode);
-  final themeMode = RRThemeMode.values.cast<RRThemeMode?>().firstWhere(
-        (m) => m?.name == themeStr,
-        orElse: () => RRThemeMode.blueRed,
-      ) ??
+  final themeMode = RRThemeMode.values
+          .cast<RRThemeMode?>()
+          .firstWhere((m) => m?.name == themeStr, orElse: () => RRThemeMode.blueRed) ??
       RRThemeMode.blueRed;
 
   try {
@@ -348,9 +346,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
     _shareAnimController =
         AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
 
-    _restoreState().then((_) {
-      _loadAssets();
-    });
+    _restoreState().then((_) => _loadAssets());
     _loadRewarded();
   }
 
@@ -370,7 +366,6 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       _persistState();
     }
-
     if (state == AppLifecycleState.resumed) {
       _checkDailyRefill(showToast: true);
     }
@@ -535,9 +530,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
 
   Future<void> _nextRandom({bool startup = false}) async {
     if (_assets.isEmpty) {
-      setState(() {
-        _current = null;
-      });
+      setState(() => _current = null);
       return;
     }
 
@@ -554,16 +547,12 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
       _fadeInController.forward(from: 0.0);
 
       _seen.add(a.id);
-      if (_seen.length > 500) {
-        _seen.remove(_seen.first);
-      }
+      if (_seen.length > 500) _seen.remove(_seen.first);
       if (!startup) _persistState();
       return;
     }
 
-    setState(() {
-      _seen.clear();
-    });
+    setState(() => _seen.clear());
     await _nextRandom(startup: startup);
   }
 
@@ -590,10 +579,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
       await _keepAnimController.forward(from: 0.0);
       _keepAnimController.reset();
 
-      setState(() {
-        _keptCount += 1;
-      });
-
+      setState(() => _keptCount += 1);
       await _nextRandom();
     } finally {
       if (!mounted) return;
@@ -621,13 +607,10 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
       await _deleteAnimController.forward(from: 0.0);
       _deleteAnimController.reset();
 
-      // real file size if possible (int), fallback estimate
       int bytes = 0;
       try {
         final file = await a.file;
-        if (file != null) {
-          bytes = await file.length();
-        }
+        if (file != null) bytes = await file.length();
       } catch (_) {}
 
       if (bytes <= 0) {
@@ -877,8 +860,6 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
                 ],
               ),
               SizedBox(height: 10 * s),
-
-              // Themes
               Align(
                 alignment: Alignment.centerLeft,
                 child: Padding(
@@ -908,10 +889,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
                   ],
                 ),
               ),
-
               SizedBox(height: 10 * s),
-
-              // Stats entry
               ListTile(
                 dense: true,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -926,10 +904,7 @@ class _RetroRelicsViewerState extends State<RetroRelicsViewer>
                   _showStats();
                 },
               ),
-
               SizedBox(height: 8 * s),
-
-              // Privacy Policy entry
               ListTile(
                 dense: true,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -1036,14 +1011,14 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
     );
   }
 
-  void _onPanUpdate(DragUpdateDetails d) {
-    if (_busy || _current == null) return;
-    setState(() => _dragOffset += d.delta);
-  }
-
   void _onPanStart(DragStartDetails d) {
     if (_busy || _current == null) return;
     setState(() => _isDragging = true);
+  }
+
+  void _onPanUpdate(DragUpdateDetails d) {
+    if (_busy || _current == null) return;
+    setState(() => _dragOffset += d.delta); // free X + Y movement
   }
 
   Future<void> _onPanEnd(DragEndDetails d) async {
@@ -1051,7 +1026,6 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
 
     final w = MediaQuery.of(context).size.width;
     final threshold = w * 0.22;
-
     final dx = _dragOffset.dx;
 
     if (dx <= -threshold) {
@@ -1079,10 +1053,12 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
     final asset = _current;
 
     final s = _rrScale(context);
-    final paddingH = (MediaQuery.of(context).size.width * 0.04).clamp(12.0, 22.0);
-    final paddingV = (12.0 * s).clamp(10.0, 18.0);
+    final paddingH =
+        (MediaQuery.of(context).size.width * 0.04).clamp(12.0, 22.0).toDouble();
+    final paddingV = (12.0 * s).clamp(10.0, 18.0).toDouble();
 
-    final buttonH = (48.0 * s).clamp(44.0, 58.0);
+    // slightly bigger buttons
+    final buttonH = (54.0 * s).clamp(48.0, 64.0).toDouble();
 
     return _Shell(
       child: Stack(
@@ -1120,25 +1096,30 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
                       ),
                     ),
                   ),
-                  SizedBox(height: 8 * s),
+
+                  // moved up a bit (smaller gap)
+                  SizedBox(height: 4 * s),
+
                   Expanded(
                     flex: 3,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _ActionRow(
-                          enabled: !_busy && asset != null,
-                          onDelete: _onDelete,
-                          onShare: _onShare,
-                          onKeep: _onKeep,
-                          imageDragDx: _dragOffset.dx,
-                          height: buttonH,
-                        ),
-                        if (_toast != null) ...[
-                          SizedBox(height: 10 * s),
-                          _Toast(text: _toast!),
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 2 * s), // push row upwards slightly
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          _ActionRow(
+                            enabled: !_busy && asset != null,
+                            onDelete: _onDelete,
+                            onShare: _onShare,
+                            onKeep: _onKeep,
+                            height: buttonH,
+                          ),
+                          if (_toast != null) ...[
+                            SizedBox(height: 10 * s),
+                            _Toast(text: _toast!),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ],
@@ -1226,9 +1207,10 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = _rrScale(context);
 
-    // unified height for token pill + gear diameter
-    final pillH = (34.0 * s).clamp(28.0, 40.0);
-    final gearIconSize = (12.0 * s).clamp(10.0, 14.0); // ~half of the old look
+    // Token pill height (and gear diameter must match exactly)
+    final pillH = (34.0 * s).clamp(28.0, 40.0).toDouble();
+    // Gear icon "half as big" feeling
+    final gearIconSize = (12.0 * s).clamp(10.0, 14.0).toDouble();
 
     return Column(
       children: [
@@ -1249,7 +1231,6 @@ class _TopBar extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Settings gear (circle)
             InkWell(
               onTap: onOpenSettings,
               borderRadius: BorderRadius.circular(pillH / 2),
@@ -1265,8 +1246,6 @@ class _TopBar extends StatelessWidget {
                 child: Icon(Icons.settings, size: gearIconSize, color: Colors.white.withOpacity(0.9)),
               ),
             ),
-
-            // Tokens (same height)
             _TokenPill(height: pillH, credits: credits),
           ],
         ),
@@ -1331,11 +1310,7 @@ class _MediaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fadeAnimation = CurvedAnimation(
-      parent: fadeInController,
-      curve: Curves.easeOut,
-    );
-
+    final fadeAnimation = CurvedAnimation(parent: fadeInController, curve: Curves.easeOut);
     final scaleInAnimation = Tween<double>(begin: 0.92, end: 1.0).animate(
       CurvedAnimation(parent: fadeInController, curve: Curves.easeOutCubic),
     );
@@ -1401,10 +1376,7 @@ class _MediaCard extends StatelessWidget {
                   children: [
                     if (asset == null)
                       Center(
-                        child: Text(
-                          'Loading...',
-                          style: TextStyle(color: Colors.white.withOpacity(0.7)),
-                        ),
+                        child: Text('Loading...', style: TextStyle(color: Colors.white.withOpacity(0.7))),
                       )
                     else
                       Positioned.fill(
@@ -1412,7 +1384,6 @@ class _MediaCard extends StatelessWidget {
                           builder: (context, c) {
                             final w = max(200, c.maxWidth.floor());
                             final h = max(200, c.maxHeight.floor());
-
                             return AssetEntityImage(
                               asset!,
                               isOriginal: false,
@@ -1429,11 +1400,7 @@ class _MediaCard extends StatelessWidget {
                           scale: keepAnimController.value * 3,
                           child: Opacity(
                             opacity: 1.0 - keepAnimController.value,
-                            child: const Icon(
-                              Icons.favorite,
-                              color: RRPalette.keep,
-                              size: 52,
-                            ),
+                            child: const Icon(Icons.favorite, color: RRPalette.keep, size: 52),
                           ),
                         ),
                       ),
@@ -1462,49 +1429,39 @@ class _ActionRow extends StatelessWidget {
     required this.onShare,
     required this.onKeep,
     required this.height,
-    this.imageDragDx = 0.0,
   });
 
   final bool enabled;
   final VoidCallback onDelete;
   final VoidCallback onShare;
   final VoidCallback onKeep;
-  final double imageDragDx;
   final double height;
 
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.of(context).size.width;
-    final threshold = w * 0.22;
-
-    final deleteFraction =
-        imageDragDx < 0 ? (-imageDragDx / threshold).clamp(0.0, 1.0) : 0.0;
-    final keepFraction =
-        imageDragDx > 0 ? (imageDragDx / threshold).clamp(0.0, 1.0) : 0.0;
-
     final s = _rrScale(context);
 
     return Row(
       children: [
-        // Delete (LEFT)
+        // Delete (LEFT) - no sliding, just tap
         Expanded(
-          child: _SlideToConfirmButton(
-            circleIcon: Icons.delete_outline,
+          child: _EdgeIconActionButton(
+            enabled: enabled,
             label: 'Delete',
+            icon: Icons.delete_outline,
             bgColor: RRPalette.delete,
             borderColor: RRPalette.delete,
-            slideFromLeft: true,
-            enabled: enabled,
-            onConfirm: onDelete,
-            externalDragFraction: deleteFraction,
             height: height,
+            iconAtStart: true,
+            onTap: onDelete,
           ),
         ),
         SizedBox(width: 10 * s),
 
         // Share (center)
         SizedBox(
-          width: (w * 0.22).clamp(78.0, 110.0),
+          width: (w * 0.22).clamp(78.0, 110.0).toDouble(),
           child: InkWell(
             onTap: enabled ? onShare : null,
             borderRadius: BorderRadius.circular(height / 2),
@@ -1522,11 +1479,7 @@ class _ActionRow extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.ios_share,
-                    size: 18 * s,
-                    color: Colors.white.withOpacity(enabled ? 0.9 : 0.5),
-                  ),
+                  Icon(Icons.ios_share, size: 18 * s, color: Colors.white.withOpacity(enabled ? 0.9 : 0.5)),
                   SizedBox(width: 8 * s),
                   Text(
                     'Share',
@@ -1543,18 +1496,17 @@ class _ActionRow extends StatelessWidget {
         ),
         SizedBox(width: 10 * s),
 
-        // Keep (RIGHT)
+        // Keep (RIGHT) - no sliding, just tap
         Expanded(
-          child: _SlideToConfirmButton(
-            circleIcon: Icons.favorite_border,
+          child: _EdgeIconActionButton(
+            enabled: enabled,
             label: 'Keep',
+            icon: Icons.favorite_border,
             bgColor: RRPalette.keep,
             borderColor: RRPalette.keep,
-            slideFromLeft: false,
-            enabled: enabled,
-            onConfirm: onKeep,
-            externalDragFraction: keepFraction,
             height: height,
+            iconAtStart: false,
+            onTap: onKeep,
           ),
         ),
       ],
@@ -1562,190 +1514,111 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
-class _SlideToConfirmButton extends StatefulWidget {
-  const _SlideToConfirmButton({
-    required this.circleIcon,
+class _EdgeIconActionButton extends StatelessWidget {
+  const _EdgeIconActionButton({
+    required this.enabled,
     required this.label,
+    required this.icon,
     required this.bgColor,
     required this.borderColor,
-    required this.slideFromLeft,
-    required this.enabled,
-    required this.onConfirm,
     required this.height,
-    this.externalDragFraction = 0.0,
+    required this.iconAtStart,
+    required this.onTap,
   });
 
-  // NO arrows anymore
-  final IconData circleIcon;
+  final bool enabled;
   final String label;
+  final IconData icon;
   final Color bgColor;
   final Color borderColor;
-  final bool slideFromLeft;
-  final bool enabled;
-  final VoidCallback onConfirm;
-  final double externalDragFraction;
   final double height;
-
-  @override
-  State<_SlideToConfirmButton> createState() => _SlideToConfirmButtonState();
-}
-
-class _SlideToConfirmButtonState extends State<_SlideToConfirmButton>
-    with SingleTickerProviderStateMixin {
-  double _dragFraction = 0.0;
-  bool _confirmed = false;
-
-  double _snapBackStart = 0.0;
-
-  late AnimationController _snapBack;
-
-  @override
-  void initState() {
-    super.initState();
-    _snapBack = AnimationController(vsync: this, duration: const Duration(milliseconds: 220))
-      ..addListener(() {
-        if (!mounted) return;
-        setState(() {
-          _dragFraction = _snapBackStart * (1 - _snapBack.value);
-        });
-      });
-  }
-
-  @override
-  void dispose() {
-    _snapBack.dispose();
-    super.dispose();
-  }
-
-  void _onPanUpdate(DragUpdateDetails details, double maxSlide) {
-    if (!widget.enabled || _confirmed) return;
-
-    setState(() {
-      if (widget.slideFromLeft) {
-        _dragFraction = (_dragFraction + details.delta.dx / maxSlide).clamp(0.0, 1.0);
-      } else {
-        _dragFraction = (_dragFraction - details.delta.dx / maxSlide).clamp(0.0, 1.0);
-      }
-    });
-  }
-
-  void _onPanEnd(DragEndDetails details) {
-    if (!widget.enabled || _confirmed) return;
-
-    if (_dragFraction >= 0.75) {
-      setState(() {
-        _confirmed = true;
-        _dragFraction = 1.0;
-      });
-      widget.onConfirm();
-
-      Future.delayed(const Duration(milliseconds: 350), () {
-        if (!mounted) return;
-        setState(() {
-          _confirmed = false;
-          _dragFraction = 0.0;
-        });
-      });
-      return;
-    }
-
-    _snapBackStart = _dragFraction;
-    _snapBack.forward(from: 0.0);
-  }
+  final bool iconAtStart;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final borderHighlight = widget.borderColor.withOpacity(0.9);
+    final s = _rrScale(context);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final trackWidth = constraints.maxWidth;
-        final circleSize = widget.height; // perfect edge alignment
-        final maxSlide = max(1.0, trackWidth - circleSize);
+    // circle slightly bigger + slightly higher
+    final circleSize = (height * 1.10).toDouble();
+    final lift = (height * 0.10).toDouble(); // move up a bit
+    final yOffset = -((circleSize - height) / 2) - lift;
 
-        final effectiveFraction = max(_dragFraction, widget.externalDragFraction).clamp(0.0, 1.0);
-        final circleOffset = effectiveFraction * maxSlide;
+    final contentPad = (circleSize * 0.60).toDouble();
+    final sidePad = (12.0 * s).toDouble();
 
-        final highlightIntensity = effectiveFraction;
-        final scaleValue = 1.0 + (highlightIntensity * 0.04);
-        final glowBlur = 6.0 + (highlightIntensity * 12.0);
-        final glowSpread = highlightIntensity * 3.0;
-        final textOpacity = 0.85 + (highlightIntensity * 0.15);
-
-        final s = _rrScale(context);
-
-        return Transform.scale(
-          scale: scaleValue,
-          child: Container(
-            height: widget.height,
-            decoration: BoxDecoration(
-              color: widget.bgColor.withOpacity(0.58 + highlightIntensity * 0.22),
-              borderRadius: BorderRadius.circular(widget.height / 2),
-              border: Border.all(color: borderHighlight, width: 2.3),
-              boxShadow: [
-                BoxShadow(
-                  color: widget.bgColor.withOpacity(0.18 + highlightIntensity * 0.5),
-                  blurRadius: glowBlur,
-                  spreadRadius: glowSpread,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // label (no icon here to avoid redundancy)
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12 * s),
-                  child: Align(
-                    alignment: widget.slideFromLeft ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Text(
-                      widget.label,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white.withOpacity(textOpacity),
-                        fontSize: 14 * s,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // draggable circle (icon only, NO ARROW)
-                Positioned(
-                  left: widget.slideFromLeft ? circleOffset : null,
-                  right: widget.slideFromLeft ? null : circleOffset,
-                  top: 0,
-                  child: GestureDetector(
-                    onPanUpdate: (d) => _onPanUpdate(d, maxSlide),
-                    onPanEnd: _onPanEnd,
-                    child: AnimatedContainer(
-                      duration: _confirmed ? const Duration(milliseconds: 180) : Duration.zero,
-                      width: circleSize,
-                      height: circleSize,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: widget.bgColor,
-                        border: Border.all(color: borderHighlight, width: 2.3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: widget.bgColor.withOpacity(0.42 + highlightIntensity * 0.35),
-                            blurRadius: 10 + highlightIntensity * 15,
-                            spreadRadius: 1 + highlightIntensity * 4,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        widget.circleIcon,
-                        color: Colors.white,
-                        size: 20 * s,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(height / 2),
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: bgColor.withOpacity(enabled ? 0.60 : 0.22),
+            borderRadius: BorderRadius.circular(height / 2),
+            border: Border.all(color: borderColor.withOpacity(enabled ? 0.95 : 0.35), width: 2.3),
+            boxShadow: [
+              BoxShadow(
+                color: bgColor.withOpacity(enabled ? 0.18 : 0.0),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        );
-      },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Padding(
+                padding: iconAtStart
+                    ? EdgeInsets.only(left: contentPad, right: sidePad)
+                    : EdgeInsets.only(left: sidePad, right: contentPad),
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white.withOpacity(enabled ? 0.92 : 0.55),
+                      fontSize: (14.0 * s).toDouble(),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: iconAtStart ? 0 : null,
+                right: iconAtStart ? null : 0,
+                top: yOffset,
+                child: Container(
+                  width: circleSize,
+                  height: circleSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: bgColor.withOpacity(enabled ? 1.0 : 0.55),
+                    border: Border.all(
+                      color: borderColor.withOpacity(enabled ? 0.95 : 0.35),
+                      width: 2.3,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: bgColor.withOpacity(enabled ? 0.45 : 0.0),
+                        blurRadius: 14,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    icon,
+                    color: Colors.white.withOpacity(enabled ? 1.0 : 0.6),
+                    size: (20.0 * s).toDouble(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1840,7 +1713,12 @@ class _StatsOverlay extends StatelessWidget {
 }
 
 class _StatRow extends StatelessWidget {
-  const _StatRow({required this.icon, required this.label, required this.value, required this.color});
+  const _StatRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   final String icon;
   final String label;
@@ -1850,7 +1728,6 @@ class _StatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = _rrScale(context);
-
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 14 * s, vertical: 10 * s),
       decoration: BoxDecoration(
@@ -1892,13 +1769,13 @@ class _AdIds {
 
 double _rrScale(BuildContext context) {
   final shortest = MediaQuery.of(context).size.shortestSide;
-  return (shortest / 390.0).clamp(0.85, 1.20) as double;
+  return (shortest / 390.0).clamp(0.85, 1.20).toDouble();
 }
 
 double _rrLogoHeight(BuildContext context) {
   final h = MediaQuery.of(context).size.height;
   final s = _rrScale(context);
-  final base = (h * 0.07).clamp(44.0, 72.0) as double;
-  final factor = (s.clamp(0.95, 1.05)) as double;
+  final base = (h * 0.07).clamp(44.0, 72.0).toDouble();
+  final factor = (s.clamp(0.95, 1.05)).toDouble();
   return base * factor;
 }
