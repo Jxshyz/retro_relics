@@ -1018,7 +1018,10 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
 
   void _onPanUpdate(DragUpdateDetails d) {
     if (_busy || _current == null) return;
-    setState(() => _dragOffset += d.delta); // free X + Y movement
+    setState(() {
+      final nextDx = (_dragOffset.dx + d.delta.dx).clamp(-220.0, 220.0).toDouble();
+      _dragOffset = Offset(nextDx, 0);
+    });
   }
 
   Future<void> _onPanEnd(DragEndDetails d) async {
@@ -1029,14 +1032,14 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
     final dx = _dragOffset.dx;
 
     if (dx <= -threshold) {
-      setState(() => _dragOffset = Offset(-w, _dragOffset.dy));
+      setState(() => _dragOffset = Offset(-w, 0));
       await _onDelete();
       if (mounted) setState(() => _isDragging = false);
       return;
     }
 
     if (dx >= threshold) {
-      setState(() => _dragOffset = Offset(w, _dragOffset.dy));
+      setState(() => _dragOffset = Offset(w, 0));
       await _onKeep();
       if (mounted) setState(() => _isDragging = false);
       return;
@@ -1051,31 +1054,66 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
   @override
   Widget build(BuildContext context) {
     final asset = _current;
-
+    final media = MediaQuery.of(context);
     final s = _rrScale(context);
-    final paddingH =
-        (MediaQuery.of(context).size.width * 0.04).clamp(12.0, 22.0).toDouble();
-    final paddingV = (12.0 * s).clamp(10.0, 18.0).toDouble();
 
-    // slightly bigger buttons
-    final buttonH = (54.0 * s).clamp(48.0, 64.0).toDouble();
+    final sidePadding =
+        (media.size.width * 0.04).clamp(12.0, 22.0).toDouble();
+    final topPadding = (10.0 * s).clamp(8.0, 16.0).toDouble();
+    final controlToCardGap = ((24.0 * s) * 0.70).clamp(15.0, 22.0).toDouble();
+    final toastGap = (12.0 * s).clamp(10.0, 18.0).toDouble();
+
+    final topButtonSize = (48.0 * s).clamp(44.0, 58.0).toDouble();
+    final tokenWidth = topButtonSize;
+    final bottomButtonHeight = (56.0 * s).clamp(50.0, 68.0).toDouble();
+    final bottomSafeGap = max(media.padding.bottom + (14.0 * s), 24.0 * s).toDouble();
+
+    final largeLogoHeight =
+        (_rrLogoHeight(context) * 0.98).clamp(42.0, 70.0).toDouble();
+    final headerHeight = max(topButtonSize, largeLogoHeight);
 
     return _Shell(
-      child: Stack(
-        children: [
-          SafeArea(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(paddingH, paddingV, paddingH, paddingV),
-              child: Column(
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(sidePadding, topPadding, sidePadding, 0),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final toastHeight =
+                  _toast == null ? 0.0 : (44.0 * s).clamp(40.0, 54.0).toDouble();
+              final actionColumnHeight = bottomButtonHeight +
+                  (_toast == null ? 0.0 : toastGap + toastHeight);
+              final bottomContentHeight =
+                  controlToCardGap + actionColumnHeight + bottomSafeGap;
+              final cardHeight = max(
+                constraints.maxHeight - headerHeight - controlToCardGap - bottomContentHeight,
+                220.0 * s,
+              );
+
+              return Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  _TopBar(
-                    credits: _credits,
-                    onReload: _busy ? null : _loadAssets,
-                    onOpenSettings: _openSettings,
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: headerHeight,
+                    child: _TopBar(
+                      credits: _credits,
+                      onReload: _busy ? null : _loadAssets,
+                      onOpenSettings: _openSettings,
+                      buttonSize: topButtonSize,
+                      tokenWidth: tokenWidth,
+                      logoHeight: largeLogoHeight,
+                      minGap: controlToCardGap,
+                      onOpenRewards: _showRewardGate,
+                    ),
                   ),
-                  SizedBox(height: 6 * s),
-                  Expanded(
-                    flex: 15,
+                  Positioned(
+                    top: headerHeight + controlToCardGap,
+                    left: 0,
+                    right: 0,
+                    height: cardHeight,
                     child: GestureDetector(
                       onPanStart: _onPanStart,
                       onPanUpdate: _onPanUpdate,
@@ -1083,7 +1121,7 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
                       child: AnimatedContainer(
                         duration: _isDragging ? Duration.zero : const Duration(milliseconds: 180),
                         curve: Curves.easeOut,
-                        transform: Matrix4.translationValues(_dragOffset.dx, _dragOffset.dy, 0),
+                        transform: Matrix4.translationValues(_dragOffset.dx, 0, 0),
                         child: _MediaCard(
                           asset: asset,
                           busy: _busy,
@@ -1096,48 +1134,43 @@ You can enable Airplane Mode and use the app to confirm that photos still load a
                       ),
                     ),
                   ),
-
-                  // moved up a bit (smaller gap)
-                  SizedBox(height: 4 * s),
-
-                  Expanded(
-                    flex: 3,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: 2 * s), // push row upwards slightly
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          _ActionRow(
-                            enabled: !_busy && asset != null,
-                            onDelete: _onDelete,
-                            onShare: _onShare,
-                            onKeep: _onKeep,
-                            height: buttonH,
-                          ),
-                          if (_toast != null) ...[
-                            SizedBox(height: 10 * s),
-                            _Toast(text: _toast!),
-                          ],
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: bottomSafeGap,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ActionRow(
+                          enabled: !_busy && asset != null,
+                          onDelete: _onDelete,
+                          onShare: _onShare,
+                          onKeep: _onKeep,
+                          height: bottomButtonHeight,
+                        ),
+                        if (_toast != null) ...[
+                          SizedBox(height: toastGap),
+                          _Toast(text: _toast!),
                         ],
-                      ),
+                      ],
                     ),
                   ),
+                  if (_showingStats)
+                    Positioned(
+                      top: headerHeight + controlToCardGap + (12 * s),
+                      left: 0,
+                      right: 0,
+                      child: _StatsOverlay(
+                        deletedCount: _deletedCount,
+                        keptCount: _keptCount,
+                        savedSpaceBytes: _savedSpaceBytes,
+                      ),
+                    ),
                 ],
-              ),
-            ),
+              );
+            },
           ),
-          if (_showingStats)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + (78 * s),
-              left: paddingH,
-              right: paddingH,
-              child: _StatsOverlay(
-                deletedCount: _deletedCount,
-                keptCount: _keptCount,
-                savedSpaceBytes: _savedSpaceBytes,
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -1197,97 +1230,184 @@ class _TopBar extends StatelessWidget {
     required this.credits,
     required this.onReload,
     required this.onOpenSettings,
+    required this.buttonSize,
+    required this.tokenWidth,
+    required this.logoHeight,
+    required this.minGap,
+    required this.onOpenRewards,
   });
 
   final int credits;
   final VoidCallback? onReload;
   final VoidCallback onOpenSettings;
+  final double buttonSize;
+  final double tokenWidth;
+  final double logoHeight;
+  final double minGap;
+  final VoidCallback onOpenRewards;
+
+  @override
+  Widget build(BuildContext context) {
+    final rowHeight = max(buttonSize, logoHeight);
+    final topOffset = (rowHeight - buttonSize) / 2;
+    final horizontalLogoGap = (minGap * 0.40).clamp(6.0, 10.0).toDouble();
+
+    return SizedBox(
+      height: rowHeight,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxLogoWidth = max(
+            0.0,
+            constraints.maxWidth - buttonSize - tokenWidth - (horizontalLogoGap * 2),
+          );
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: Center(
+                  child: GestureDetector(
+                    onTap: onReload,
+                    child: IgnorePointer(
+                      ignoring: onReload == null,
+                      child: SizedBox(
+                        width: maxLogoWidth,
+                        height: logoHeight,
+                        child: ClipRect(
+                          child: FittedBox(
+                            fit: BoxFit.contain,
+                            child: Image.asset(
+                              'Logo/3.png',
+                              filterQuality: FilterQuality.high,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: topOffset,
+                left: 0,
+                child: _TopCircleButton(
+                  size: buttonSize,
+                  icon: Icons.settings,
+                  onTap: onOpenSettings,
+                ),
+              ),
+              Positioned(
+                top: topOffset,
+                right: 0,
+                child: _TokenPill(
+                  height: buttonSize,
+                  width: buttonSize,
+                  credits: credits,
+                  onTap: onOpenRewards,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TopCircleButton extends StatelessWidget {
+  const _TopCircleButton({
+    required this.size,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final double size;
+  final IconData icon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final s = _rrScale(context);
 
-    // Token pill height (and gear diameter must match exactly)
-    final pillH = (34.0 * s).clamp(28.0, 40.0).toDouble();
-    // Gear icon "half as big" feeling
-    final gearIconSize = (12.0 * s).clamp(10.0, 14.0).toDouble();
-
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.only(top: 4 * s, bottom: 4 * s),
-          child: GestureDetector(
-            onTap: onReload,
-            child: SizedBox(
-              height: _rrLogoHeight(context),
-              child: Image.asset(
-                'Logo/3.png',
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
-              ),
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(size / 2),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.06),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: (16.0 * s).clamp(14.0, 20.0).toDouble(),
+            color: Colors.white.withOpacity(0.9),
           ),
         ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            InkWell(
-              onTap: onOpenSettings,
-              borderRadius: BorderRadius.circular(pillH / 2),
-              child: Container(
-                width: pillH,
-                height: pillH,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withOpacity(0.08)),
-                ),
-                alignment: Alignment.center,
-                child: Icon(Icons.settings, size: gearIconSize, color: Colors.white.withOpacity(0.9)),
-              ),
-            ),
-            _TokenPill(height: pillH, credits: credits),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }
 
 class _TokenPill extends StatelessWidget {
-  const _TokenPill({required this.height, required this.credits});
+  const _TokenPill({
+    required this.height,
+    required this.width,
+    required this.credits,
+    required this.onTap,
+  });
+
   final double height;
+  final double width;
   final int credits;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final s = _rrScale(context);
-    return Container(
-      height: height,
-      padding: EdgeInsets.symmetric(horizontal: 12 * s),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+    final iconSize = (14.5 * s).clamp(13.0, 17.0).toDouble();
+    final numberSize = (8.2 * s).clamp(7.0, 10.0).toDouble();
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(height / 2),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.bolt, size: 16 * s, color: Colors.white.withOpacity(0.85)),
-          SizedBox(width: 6 * s),
-          Text(
-            '$credits',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 13 * s,
-            ),
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.06),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
           ),
-        ],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.bolt, size: iconSize, color: Colors.white.withOpacity(0.9)),
+              SizedBox(height: 1.5 * s),
+              Text(
+                '$credits',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white.withOpacity(0.95),
+                  fontSize: numberSize,
+                  height: 1.0,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
+
 
 class _MediaCard extends StatelessWidget {
   const _MediaCard({
@@ -1439,73 +1559,41 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final w = MediaQuery.of(context).size.width;
     final s = _rrScale(context);
 
     return Row(
       children: [
-        // Delete (LEFT) - no sliding, just tap
         Expanded(
-          child: _EdgeIconActionButton(
+          child: _PrimaryActionButton(
             enabled: enabled,
             label: 'Delete',
-            icon: Icons.delete_outline,
+            leadingText: '🗑️',
             bgColor: RRPalette.delete,
             borderColor: RRPalette.delete,
             height: height,
-            iconAtStart: true,
             onTap: onDelete,
           ),
         ),
         SizedBox(width: 10 * s),
-
-        // Share (center)
-        SizedBox(
-          width: (w * 0.22).clamp(78.0, 110.0).toDouble(),
-          child: InkWell(
-            onTap: enabled ? onShare : null,
-            borderRadius: BorderRadius.circular(height / 2),
-            child: Container(
-              height: height,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: RRPalette.share.withOpacity(enabled ? 0.30 : 0.18),
-                borderRadius: BorderRadius.circular(height / 2),
-                border: Border.all(
-                  color: RRPalette.share.withOpacity(enabled ? 0.7 : 0.35),
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.ios_share, size: 18 * s, color: Colors.white.withOpacity(enabled ? 0.9 : 0.5)),
-                  SizedBox(width: 8 * s),
-                  Text(
-                    'Share',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white.withOpacity(enabled ? 0.9 : 0.5),
-                      fontSize: 13 * s,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        Expanded(
+          child: _PrimaryActionButton(
+            enabled: enabled,
+            label: 'Share',
+            bgColor: RRPalette.share,
+            borderColor: RRPalette.share,
+            height: height,
+            onTap: onShare,
           ),
         ),
         SizedBox(width: 10 * s),
-
-        // Keep (RIGHT) - no sliding, just tap
         Expanded(
-          child: _EdgeIconActionButton(
+          child: _PrimaryActionButton(
             enabled: enabled,
             label: 'Keep',
-            icon: Icons.favorite_border,
+            trailingText: '❤️',
             bgColor: RRPalette.keep,
             borderColor: RRPalette.keep,
             height: height,
-            iconAtStart: false,
             onTap: onKeep,
           ),
         ),
@@ -1514,38 +1602,30 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
-class _EdgeIconActionButton extends StatelessWidget {
-  const _EdgeIconActionButton({
+class _PrimaryActionButton extends StatelessWidget {
+  const _PrimaryActionButton({
     required this.enabled,
     required this.label,
-    required this.icon,
     required this.bgColor,
     required this.borderColor,
     required this.height,
-    required this.iconAtStart,
     required this.onTap,
+    this.leadingText,
+    this.trailingText,
   });
 
   final bool enabled;
   final String label;
-  final IconData icon;
   final Color bgColor;
   final Color borderColor;
   final double height;
-  final bool iconAtStart;
   final VoidCallback onTap;
+  final String? leadingText;
+  final String? trailingText;
 
   @override
   Widget build(BuildContext context) {
     final s = _rrScale(context);
-
-    // circle slightly bigger + slightly higher
-    final circleSize = (height * 1.10).toDouble();
-    final lift = (height * 0.10).toDouble(); // move up a bit
-    final yOffset = -((circleSize - height) / 2) - lift;
-
-    final contentPad = (circleSize * 0.60).toDouble();
-    final sidePad = (12.0 * s).toDouble();
 
     return Material(
       color: Colors.transparent,
@@ -1554,74 +1634,54 @@ class _EdgeIconActionButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(height / 2),
         child: Container(
           height: height,
+          padding: EdgeInsets.symmetric(horizontal: 14 * s),
           decoration: BoxDecoration(
-            color: bgColor.withOpacity(enabled ? 0.60 : 0.22),
+            color: bgColor.withOpacity(enabled ? 0.68 : 0.22),
             borderRadius: BorderRadius.circular(height / 2),
-            border: Border.all(color: borderColor.withOpacity(enabled ? 0.95 : 0.35), width: 2.3),
+            border: Border.all(
+              color: borderColor.withOpacity(enabled ? 0.95 : 0.35),
+              width: 2.0,
+            ),
             boxShadow: [
               BoxShadow(
-                color: bgColor.withOpacity(enabled ? 0.18 : 0.0),
+                color: bgColor.withOpacity(enabled ? 0.22 : 0.0),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Padding(
-                padding: iconAtStart
-                    ? EdgeInsets.only(left: contentPad, right: sidePad)
-                    : EdgeInsets.only(left: sidePad, right: contentPad),
-                child: Align(
-                  alignment: Alignment.center,
-                  child: Text(
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (leadingText != null) ...[
+                    Text(leadingText!, style: TextStyle(fontSize: 17 * s)),
+                    SizedBox(width: 8 * s),
+                  ],
+                  Text(
                     label,
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
-                      color: Colors.white.withOpacity(enabled ? 0.92 : 0.55),
-                      fontSize: (14.0 * s).toDouble(),
+                      color: Colors.white.withOpacity(enabled ? 0.95 : 0.55),
+                      fontSize: 14 * s,
                     ),
                   ),
-                ),
+                  if (trailingText != null) ...[
+                    SizedBox(width: 8 * s),
+                    Text(trailingText!, style: TextStyle(fontSize: 17 * s)),
+                  ],
+                ],
               ),
-              Positioned(
-                left: iconAtStart ? 0 : null,
-                right: iconAtStart ? null : 0,
-                top: yOffset,
-                child: Container(
-                  width: circleSize,
-                  height: circleSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: bgColor.withOpacity(enabled ? 1.0 : 0.55),
-                    border: Border.all(
-                      color: borderColor.withOpacity(enabled ? 0.95 : 0.35),
-                      width: 2.3,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: bgColor.withOpacity(enabled ? 0.45 : 0.0),
-                        blurRadius: 14,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    icon,
-                    color: Colors.white.withOpacity(enabled ? 1.0 : 0.6),
-                    size: (20.0 * s).toDouble(),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 }
+
 
 class _Toast extends StatelessWidget {
   const _Toast({required this.text});

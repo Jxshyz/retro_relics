@@ -1,0 +1,1 @@
+ C:\\Users\\Joshua\\Documents\\Projekte\\retro_relics\\.dart_tool\\flutter_build\\99eac149a6246ff6e09b79a243f68ea6\\native_assets.json: 
